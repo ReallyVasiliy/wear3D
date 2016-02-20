@@ -1,0 +1,8 @@
+This project builds on some code from "Android WatchFace Sample" by The Android Open Source Project,
+licensed under the Apache License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0. The
+project can be found here: http://developer.android.com/samples/WatchFace/index.html
+
+This project builds on some code from "ApiDemo" by Alain Vongsouvanh of Google, which is
+licensed under the Apache License, Version 2.0 http://www.apache.org/licenses/LICENSE-2.0.
+The project can be found here: https://github.com/googleglass/gdk-apidemo-sample
+
