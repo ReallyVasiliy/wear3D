@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit;
  * http://developer.android.com/training/graphics/opengl/draw.html
  *
  */
-public class CubeWatchFace extends Gles2WatchFaceService {
+public class CubeWatchFace extends Gles2WatchFaceService implements PlatformContext {
     private static final String TAG = CubeWatchFace.class.getSimpleName();
 
     @Override
@@ -111,7 +111,7 @@ public class CubeWatchFace extends Gles2WatchFaceService {
             GLES20.glDepthFunc(GLES20.GL_LEQUAL);
             GLES20.glEnable(GLES20.GL_BLEND);
 
-            mCube = new Cube();
+            mCube = new Cube(CubeWatchFace.this);
 
             float aspectRatio = (float) width / height;
             // Create projection matrix based on viewport
@@ -211,11 +211,11 @@ public class CubeWatchFace extends Gles2WatchFaceService {
             // In interactive, rotate with seconds
             if (isAmbient) {
                 mCubeRotationDegrees = (minutes / 60f) * 360f;
-                GLES20.glClearColor(0, 0, 0, 1);
             } else {
                 mCubeRotationDegrees = (seconds / 60f) * 360f;
-                GLES20.glClearColor(0.5f, 0.2f, 0.2f, 1);
             }
+
+            GLES20.glClearColor(0, 0, 0, 1);
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
 
             // Apply cube angle to rotation matrix, and create MVP matrix
@@ -227,5 +227,10 @@ public class CubeWatchFace extends Gles2WatchFaceService {
                 invalidate();
             }
         }
+    }
+
+    @Override
+    public Context getContext() {
+        return getApplicationContext();
     }
 }
