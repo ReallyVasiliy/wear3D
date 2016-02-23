@@ -17,6 +17,7 @@
 
 package us.kulakov.cubewear;
 
+import android.content.Context;
 import android.opengl.GLES20;
 
 import java.nio.ByteBuffer;
@@ -78,24 +79,12 @@ public class Cube {
     private final int COLOR_STRIDE = VALUES_PER_COLOR * 4;
 
     /** Shader code for the vertex. */
-    private static final String VERTEX_SHADER_CODE =
-            "uniform mat4 uMVPMatrix;" +
-                    "attribute vec4 vPosition;" +
-                    "attribute vec4 vColor;" +
-                    "varying vec4 _vColor;" +
-                    "void main() {" +
-                    "  _vColor = vColor;" +
-                    "  gl_Position = uMVPMatrix * vPosition;" +
-                    "}";
+    private static final String VERTEX_SHADER = "shaders/cube.vert";
 
     /** Shader code for the fragment. */
-    private static final String FRAGMENT_SHADER_CODE =
-            "precision mediump float;" +
-                    "varying vec4 _vColor;" +
-                    "void main() {" +
-                    "  gl_FragColor = _vColor;" +
-                    "}";
+    private static final String FRAGMENT_SHADER = "shaders/cube.frag";
 
+    private final PlatformContext mPlatformContext;
 
     private final FloatBuffer mVertexBuffer;
     private final FloatBuffer mColorBuffer;
@@ -105,7 +94,8 @@ public class Cube {
     private final int mColorHandle;
     private final int mMVPMatrixHandle;
 
-    public Cube() {
+    public Cube(PlatformContext platformContext) {
+        mPlatformContext = platformContext;
         ByteBuffer byteBuffer = ByteBuffer.allocateDirect(VERTICES.length * 4);
 
         byteBuffer.order(ByteOrder.nativeOrder());
@@ -124,9 +114,9 @@ public class Cube {
         mIndexBuffer.position(0);
 
         mProgram = GLES20.glCreateProgram();
-        GLES20.glAttachShader(mProgram, loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_CODE));
+        GLES20.glAttachShader(mProgram, loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER, mPlatformContext.getContext()));
         GLES20.glAttachShader(
-                mProgram, loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_CODE));
+                mProgram, loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER, mPlatformContext.getContext()));
         GLES20.glLinkProgram(mProgram);
 
         mPositionHandle = GLES20.glGetAttribLocation(mProgram, "vPosition");
@@ -173,5 +163,16 @@ public class Cube {
         GLES20.glCompileShader(shader);
 
         return shader;
+    }
+
+    private static int loadShader(int type, String filename, Context context) {
+        String shaderSource;
+        try {
+            shaderSource = FileUtils.readStringAsset(context, filename);
+        }
+        catch(Exception ex) {
+            throw new RuntimeException(ex.getMessage());
+        }
+        return loadShader(type, shaderSource);
     }
 }
