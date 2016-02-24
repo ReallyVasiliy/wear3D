@@ -33,7 +33,6 @@ import android.view.SurfaceHolder;
 
 import java.util.Calendar;
 import java.util.TimeZone;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Thanks to the following authors and materials:
@@ -53,14 +52,14 @@ public class CubeWatchFace extends Gles2WatchFaceService implements PlatformCont
     }
 
     private class Engine extends Gles2WatchFaceService.Engine {
-        private final float[] mVPMatrix = new float[16];
         private final float[] mProjectionMatrix = new float[16];
         private final float[] mViewMatrix = new float[16];
-        private final float[] mRotationMatrix = new float[16];
+        private final float[] mModelMatrix = new float[16];
         private final float[] mMVPMatrix = new float[16];
 
         private Calendar mCalendar = Calendar.getInstance();
         private Cube mCube = null;
+        private FrameRateComponent mFPS = null;
         private float mCubeRotationDegrees = 0f;
 
         /** Whether we've registered {@link #mTimeZoneReceiver}. */
@@ -78,9 +77,6 @@ public class CubeWatchFace extends Gles2WatchFaceService implements PlatformCont
         public void onCreate(SurfaceHolder surfaceHolder) {
             super.onCreate(surfaceHolder);
 
-            // Set the fixed camera position (View matrix).
-            Matrix.setLookAtM(mViewMatrix, 0, 0.0f, 0.0f, -4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
-
             setWatchFaceStyle(new WatchFaceStyle.Builder(CubeWatchFace.this)
                     .setCardPeekMode(WatchFaceStyle.PEEK_MODE_SHORT)
                     .setBackgroundVisibility(WatchFaceStyle.BACKGROUND_VISIBILITY_INTERRUPTIVE)
@@ -92,32 +88,33 @@ public class CubeWatchFace extends Gles2WatchFaceService implements PlatformCont
 
         @Override
         public void onGlContextCreated() {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "onGlContextCreated");
-            }
+            Log.d(TAG, "onGlContextCreated");
             super.onGlContextCreated();
 
+            mCube = new Cube(CubeWatchFace.this);
+            mFPS = new FrameRateComponent(null);
         }
 
         @Override
         public void onGlSurfaceCreated(int width, int height) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "onGlSurfaceCreated: " + width + " x " + height);
-            }
+            Log.d(TAG, "onGlSurfaceCreated: " + width + " x " + height);
             super.onGlSurfaceCreated(width, height);
 
-            GLES20.glClearDepthf(1.0f);
-            GLES20.glEnable(GLES20.GL_DEPTH_TEST);
-            GLES20.glDepthFunc(GLES20.GL_LEQUAL);
-            GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-            mCube = new Cube(CubeWatchFace.this);
+            GLES20.glEnable(GLES20.GL_BLEND);
+            GLES20.glEnable(GLES20.GL_CULL_FACE);
+            GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+
+            Matrix.setLookAtM(mViewMatrix, 0, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
+
+            GLES20.glViewport(0, 0, width, height);
 
             float aspectRatio = (float) width / height;
             // Create projection matrix based on viewport
-            Matrix.frustumM(mProjectionMatrix, 0, -aspectRatio, aspectRatio, -1.0f, 1.0f, 3.0f, 7.0f);
-            // Create MVP matrix based on projection and view
-            Matrix.multiplyMM(mVPMatrix, 0, mProjectionMatrix, 0, mViewMatrix, 0);
+            Matrix.frustumM(mProjectionMatrix, 0, -aspectRatio, aspectRatio, -1.0f, 1.0f, 1.0f, 10.0f);
+
+            mFPS.setSurface(width, height, width / 4, height / 4);
         }
 
         @Override
@@ -130,6 +127,8 @@ public class CubeWatchFace extends Gles2WatchFaceService implements PlatformCont
                     EGL14.EGL_DEPTH_SIZE, 16,
                     EGL14.EGL_STENCIL_SIZE, 8,
                     EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+                    EGL14.EGL_SAMPLE_BUFFERS, 1,
+                    EGL14.EGL_SAMPLES, 2,  // This is for 4x MSAA.
                     EGL14.EGL_NONE, 0,
                     EGL14.EGL_NONE
             };
@@ -188,11 +187,11 @@ public class CubeWatchFace extends Gles2WatchFaceService implements PlatformCont
         @Override
         public void onTimeTick() {
             super.onTimeTick();
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "onTimeTick: ambient = " + isInAmbientMode());
-            }
+            Log.d(TAG, "onTimeTick: ambient = " + isInAmbientMode());
             invalidate();
         }
+
+        private float[] mMVMatrix = new float[16];
 
         @Override
         public void onDraw() {
@@ -206,7 +205,6 @@ public class CubeWatchFace extends Gles2WatchFaceService implements PlatformCont
             boolean isAmbient = isInAmbientMode();
 
             //TODO: Draw actual time using the cube
-
             // Just a test, for now: in ambient mode, rotate cube with passing of minutes
             // In interactive, rotate with seconds
             if (isAmbient) {
@@ -215,14 +213,19 @@ public class CubeWatchFace extends Gles2WatchFaceService implements PlatformCont
                 mCubeRotationDegrees = (seconds / 60f) * 360f;
             }
 
-            GLES20.glClearColor(0, 0, 0, 1);
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
 
-            // Apply cube angle to rotation matrix, and create MVP matrix
-            Matrix.setRotateM(mRotationMatrix, 0, mCubeRotationDegrees, 1.0f, 1.0f, 1.0f);
-            Matrix.multiplyMM(mMVPMatrix, 0, mVPMatrix, 0, mRotationMatrix, 0);
-            mCube.draw(mMVPMatrix);
+            // Update cube model matrix
+            Matrix.setIdentityM(mModelMatrix, 0);
+            Matrix.translateM(mModelMatrix, 0, 0.0f, 0.0f, 2.0f);
+            Matrix.rotateM(mModelMatrix, 0, mCubeRotationDegrees, 0.0f, 1.0f, 0.0f);
 
+            Matrix.multiplyMM(mMVMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
+            Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVMatrix, 0);
+
+            mCube.draw(mMVPMatrix, mMVMatrix);
+
+            mFPS.draw();
             if (isVisible() && !isAmbient) {
                 invalidate();
             }

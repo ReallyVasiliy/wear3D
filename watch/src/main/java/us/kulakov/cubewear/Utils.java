@@ -1,6 +1,7 @@
 package us.kulakov.cubewear;
 
 import android.content.Context;
+import android.opengl.GLES20;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -10,7 +11,7 @@ import java.io.InputStreamReader;
 /**
  * Created by vasiliy on 2/22/16.
  */
-public class FileUtils {
+public class Utils {
 
     /**
      * Reads an asset file into a string, returning the resulting string
@@ -29,5 +30,25 @@ public class FileUtils {
             line = bufferedReader.readLine();
         }
         return stringBuilder.toString();
+    }
+
+    public static int loadShader(int type, String shaderCode){
+        int shader = GLES20.glCreateShader(type);
+
+        GLES20.glShaderSource(shader, shaderCode);
+        GLES20.glCompileShader(shader);
+
+        return shader;
+    }
+
+    public static int loadShader(int type, String filename, Context context) {
+        String shaderSource;
+        try {
+            shaderSource = Utils.readStringAsset(context, filename);
+        }
+        catch(Exception ex) {
+            throw new RuntimeException(ex.getMessage());
+        }
+        return loadShader(type, shaderSource);
     }
 }

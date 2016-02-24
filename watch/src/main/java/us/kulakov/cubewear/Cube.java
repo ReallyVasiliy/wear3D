@@ -16,9 +16,8 @@
  */
 
 package us.kulakov.cubewear;
-
-import android.content.Context;
 import android.opengl.GLES20;
+import android.util.Log;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -30,149 +29,107 @@ import java.nio.FloatBuffer;
  * https://github.com/googleglass/gdk-apidemo-sample/blob/master/app/src/main/java/com/google/android/glass/sample/apidemo/opengl/Cube.java
  */
 public class Cube {
-
-    /** Cube vertices */
-    private static final float VERTICES[] = {
-            -0.5f, -0.5f, -0.5f,
-            0.5f, -0.5f, -0.5f,
-            0.5f, 0.5f, -0.5f,
-            -0.5f, 0.5f, -0.5f,
-            -0.5f, -0.5f, 0.5f,
-            0.5f, -0.5f, 0.5f,
-            0.5f, 0.5f, 0.5f,
-            -0.5f, 0.5f, 0.5f
-    };
-
-    /** Vertex colors. */
-    private static final float COLORS[] = {
-            0.0f, 1.0f, 1.0f, 1.0f,
-            1.0f, 0.0f, 0.0f, 1.0f,
-            1.0f, 1.0f, 0.0f, 1.0f,
-            0.0f, 1.0f, 0.0f, 1.0f,
-            0.0f, 0.0f, 1.0f, 1.0f,
-            1.0f, 0.0f, 1.0f, 1.0f,
-            1.0f, 1.0f, 1.0f, 1.0f,
-            0.0f, 1.0f, 1.0f, 1.0f,
-    };
+    private static final String TAG = Cube.class.getSimpleName();
 
 
-    /** Order to draw vertices as triangles. */
-    private static final byte INDICES[] = {
-            0, 1, 3, 3, 1, 2, // Front face.
-            0, 1, 4, 4, 5, 1, // Bottom face.
-            1, 2, 5, 5, 6, 2, // Right face.
-            2, 3, 6, 6, 7, 3, // Top face.
-            3, 7, 4, 4, 3, 0, // Left face.
-            4, 5, 7, 7, 6, 5, // Rear face.
-    };
-
-    /** Number of coordinates per vertex in {@link #VERTICES}. */
-    private static final int COORDS_PER_VERTEX = 3;
-
-    /** Number of values per colors in {@link #COLORS}. */
-    private static final int VALUES_PER_COLOR = 4;
-
-    /** Vertex size in bytes. */
-    private final int VERTEX_STRIDE = COORDS_PER_VERTEX * 4;
-
-    /** Color size in bytes. */
-    private final int COLOR_STRIDE = VALUES_PER_COLOR * 4;
-
-    /** Shader code for the vertex. */
     private static final String VERTEX_SHADER = "shaders/cube.vert";
-
-    /** Shader code for the fragment. */
     private static final String FRAGMENT_SHADER = "shaders/cube.frag";
+
+    private final FloatBuffer mCubePositions;
+    private final FloatBuffer mCubeColors;
+    private final FloatBuffer mCubeNormals;
 
     private final PlatformContext mPlatformContext;
 
-    private final FloatBuffer mVertexBuffer;
-    private final FloatBuffer mColorBuffer;
-    private final ByteBuffer mIndexBuffer;
-    private final int mProgram;
-    private final int mPositionHandle;
-    private final int mColorHandle;
-    private final int mMVPMatrixHandle;
+    private int mProgramHandle;
+    
+    private int mPositionHandle;
+    private int mNormalHandle;
+    private int mColorHandle;
+    private int mMVPMatrixHandle;
+    private int mMVMatrixHandle;
+    private int mLightPosHandle;
 
     public Cube(PlatformContext platformContext) {
         mPlatformContext = platformContext;
-        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(VERTICES.length * 4);
 
-        byteBuffer.order(ByteOrder.nativeOrder());
-        mVertexBuffer = byteBuffer.asFloatBuffer();
-        mVertexBuffer.put(VERTICES);
-        mVertexBuffer.position(0);
 
-        byteBuffer = ByteBuffer.allocateDirect(COLORS.length * 4);
-        byteBuffer.order(ByteOrder.nativeOrder());
-        mColorBuffer = byteBuffer.asFloatBuffer();
-        mColorBuffer.put(COLORS);
-        mColorBuffer.position(0);
+        // Initialize the buffers.
+        mCubePositions = ByteBuffer.allocateDirect(CubeModel.VERTEX_POSITIONS.length * Constants.FLOAT_SIZE_BYTES)
+                .order(ByteOrder.nativeOrder()).asFloatBuffer();
+        mCubePositions.put(CubeModel.VERTEX_POSITIONS);
+        mCubePositions.position(0);
 
-        mIndexBuffer = ByteBuffer.allocateDirect(INDICES.length);
-        mIndexBuffer.put(INDICES);
-        mIndexBuffer.position(0);
+        mCubeColors = ByteBuffer.allocateDirect(CubeModel.VERTEX_COLORS.length * Constants.FLOAT_SIZE_BYTES)
+                .order(ByteOrder.nativeOrder()).asFloatBuffer();
+        mCubeColors.put(CubeModel.VERTEX_COLORS);
+        mCubeColors.position(0);
 
-        mProgram = GLES20.glCreateProgram();
-        GLES20.glAttachShader(mProgram, loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER, mPlatformContext.getContext()));
-        GLES20.glAttachShader(
-                mProgram, loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER, mPlatformContext.getContext()));
-        GLES20.glLinkProgram(mProgram);
+        mCubeNormals = ByteBuffer.allocateDirect(CubeModel.VERTEX_NORMALS.length * Constants.FLOAT_SIZE_BYTES)
+                .order(ByteOrder.nativeOrder()).asFloatBuffer();
+        mCubeNormals.put(CubeModel.VERTEX_NORMALS);
+        mCubeNormals.position(0);
 
-        mPositionHandle = GLES20.glGetAttribLocation(mProgram, "vPosition");
-        mColorHandle = GLES20.glGetAttribLocation(mProgram, "vColor");
-        mMVPMatrixHandle = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
+
+        mProgramHandle = GLES20.glCreateProgram();
+
+        if(mProgramHandle != 0) {
+            GLES20.glAttachShader(mProgramHandle, Utils.loadShader(GLES20.GL_VERTEX_SHADER, VERTEX_SHADER, mPlatformContext.getContext()));
+            GLES20.glAttachShader(mProgramHandle, Utils.loadShader(GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER, mPlatformContext.getContext()));
+
+            GLES20.glLinkProgram(mProgramHandle);
+
+            int[] linkStatus = new int[1];
+            GLES20.glGetProgramiv(mProgramHandle, GLES20.GL_LINK_STATUS, linkStatus, 0);
+
+            if (linkStatus[0] != GLES20.GL_TRUE) {
+                Log.e(TAG, "Could not link program:");
+                Log.e(TAG, GLES20.glGetProgramInfoLog(mProgramHandle));
+                GLES20.glDeleteProgram(mProgramHandle);
+                mProgramHandle = 0;
+            }
+
+            mMVPMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVPMatrix");
+            mMVMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVMatrix");
+            mLightPosHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_LightPos");
+
+            mPositionHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Position");
+            mNormalHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Normal");
+            mColorHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Color");
+        }
+
+        if(mProgramHandle == 0) {
+            throw new RuntimeException("Failed to create or link program");
+        }
     }
 
-    /**
-     * Encapsulates the OpenGL ES instructions for drawing this shape.
-     *
-     * @param mvpMatrix The Model View Project matrix in which to draw this shape
-     */
-    public void draw(float[] mvpMatrix) {
-        // Add program to OpenGL environment.
-        GLES20.glUseProgram(mProgram);
+    public void setTimeLightOrigin(float[] timeLightOrigin) {
 
-        // Prepare the cube coordinate data.
+    }
+
+    public void draw(float[] mvpMatrix, float[] mvMatrix) {
+        GLES20.glUseProgram(mProgramHandle);
+
+        mCubePositions.position(0);
+        GLES20.glVertexAttribPointer(mPositionHandle, CubeModel.POSITION_DATA_SIZE, GLES20.GL_FLOAT, false, 0, mCubePositions);
         GLES20.glEnableVertexAttribArray(mPositionHandle);
-        GLES20.glVertexAttribPointer(
-                mPositionHandle, 3, GLES20.GL_FLOAT, false, VERTEX_STRIDE, mVertexBuffer);
 
-        // Prepare the cube color data.
+        mCubeColors.position(0);
+        GLES20.glVertexAttribPointer(mColorHandle, CubeModel.COLOR_DATA_SIZE, GLES20.GL_FLOAT, false, 0, mCubeColors);
         GLES20.glEnableVertexAttribArray(mColorHandle);
-        GLES20.glVertexAttribPointer(
-                mColorHandle, 4, GLES20.GL_FLOAT, false, COLOR_STRIDE, mColorBuffer);
 
-        // Apply the projection and view transformation.
+        mCubeNormals.position(0);
+        GLES20.glVertexAttribPointer(mNormalHandle, CubeModel.NORMAL_DATA_SIZE, GLES20.GL_FLOAT, false, 0, mCubeNormals);
+        GLES20.glEnableVertexAttribArray(mNormalHandle);
+
+        // Pass in the light position in eye space.
+        GLES20.glUniform3f(mLightPosHandle, 0f, 0f, 0f);
+
+        GLES20.glUniformMatrix4fv(mMVMatrixHandle, 1, false, mvMatrix, 0);
         GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mvpMatrix, 0);
 
-        // Draw the cube.
-        GLES20.glDrawElements(
-                GLES20.GL_TRIANGLES, INDICES.length, GLES20.GL_UNSIGNED_BYTE, mIndexBuffer);
-
-        // Disable vertex arrays.
-        GLES20.glDisableVertexAttribArray(mPositionHandle);
-        GLES20.glDisableVertexAttribArray(mColorHandle);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36);
     }
 
-    /** Loads the provided shader in the program. */
-    private static int loadShader(int type, String shaderCode){
-        int shader = GLES20.glCreateShader(type);
 
-        GLES20.glShaderSource(shader, shaderCode);
-        GLES20.glCompileShader(shader);
-
-        return shader;
-    }
-
-    private static int loadShader(int type, String filename, Context context) {
-        String shaderSource;
-        try {
-            shaderSource = FileUtils.readStringAsset(context, filename);
-        }
-        catch(Exception ex) {
-            throw new RuntimeException(ex.getMessage());
-        }
-        return loadShader(type, shaderSource);
-    }
 }
